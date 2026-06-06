@@ -1,3 +1,6 @@
+mod config;
+
 fn main() {
-    println!("Hello, world!");
+    let config = config::Config::load().expect("failed to load config");
+    println!("trusted SSIDs: {:?}", config.trusted_ssids);
 }
