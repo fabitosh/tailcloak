@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub trusted_ssids: Vec<String>,
+    pub trusted_ssids: HashSet<String>,
 }
 
 impl Config {
