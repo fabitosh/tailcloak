@@ -3,9 +3,11 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::network::MacAddr;
+
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub trusted_ssids: HashSet<String>,
+    pub trusted_ssids: HashSet<MacAddr>,
 }
 
 impl Config {
