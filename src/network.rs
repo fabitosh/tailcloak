@@ -3,12 +3,6 @@ use std::str::FromStr;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize)]
 pub struct MacAddr(String);
 
-impl MacAddr {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 impl FromStr for MacAddr {
     type Err = String;
 
@@ -30,7 +24,7 @@ impl FromStr for MacAddr {
     }
 }
 
-pub fn current_getaway_mac() -> Option<MacAddr> {
+pub fn current_mac_gateway() -> Option<MacAddr> {
     let sample: MacAddr = "00:1a:2b:3c:4d:5e".parse().ok()?;
     Some(sample) // stub for now
 }

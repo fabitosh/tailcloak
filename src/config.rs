@@ -7,7 +7,7 @@ use crate::network::MacAddr;
 
 #[derive(serde::Deserialize)]
 pub struct Config {
-    pub trusted_ssids: HashSet<MacAddr>,
+    pub trusted_gateway_macs: HashSet<MacAddr>,
 }
 
 impl Config {
