@@ -26,6 +26,7 @@ fn run_daemon_once() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::load().expect("failed to load config");
     println!("trusted gateway MACs: {:?}", config.trusted_gateway_macs);
     let current_gateway = network::current_mac_gateway();
+    println!("current_gateway: {:?}", current_gateway);
     let is_trusted = current_gateway.is_some_and(|m| config.trusted_gateway_macs.contains(&m)); // no gateway = not trusted
 
     if is_trusted {

@@ -24,9 +24,16 @@ impl FromStr for MacAddr {
     }
 }
 
+impl From<netdev::MacAddr> for MacAddr {
+    fn from(m: netdev::MacAddr) -> Self {
+        MacAddr(m.address())
+    }
+}
+
 pub fn current_mac_gateway() -> Option<MacAddr> {
-    let sample: MacAddr = "00:1a:2b:3c:4d:5e".parse().ok()?;
-    Some(sample) // stub for now
+    netdev::get_default_gateway()
+        .ok()
+        .map(|g| g.mac_addr.into())
 }
 
 #[cfg(test)]
