@@ -24,9 +24,19 @@ fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
 
 fn run_daemon_once() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::load().expect("failed to load config");
-    println!("trusted gateway MACs: {:?}", config.trusted_gateway_macs);
+    let trusted: Vec<String> = config
+        .trusted_gateway_macs
+        .iter()
+        .map(|mac| mac.to_string())
+        .collect();
+    println!("trusted gateway MACs: [{}]", trusted.join(", "));
+
     let current_gateway = network::current_mac_gateway();
-    println!("current_gateway: {:?}", current_gateway);
+    match &current_gateway {
+        Some(mac) => println!("current gateway: {mac}"),
+        None => println!("current gateway: none (no physical gateway resolved)"),
+    }
+
     let is_trusted = current_gateway.is_some_and(|m| config.trusted_gateway_macs.contains(&m)); // no gateway = not trusted
 
     if is_trusted {
