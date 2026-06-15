@@ -1,34 +1,4 @@
-use std::str::FromStr;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize)]
-pub struct MacAddr(String);
-
-impl FromStr for MacAddr {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split(':').collect();
-        let valid = parts.len() == 6
-            && parts
-                .iter()
-                .all(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_hexdigit()));
-        if !valid {
-            if parts[0].contains("-") {
-                return Err(format!(
-                    "Unsupported or invald MAC address: {s}. Dash notation is not supported."
-                ));
-            }
-            return Err(format!("invalid MAC address: {s}"));
-        }
-        Ok(MacAddr(s.to_ascii_lowercase()))
-    }
-}
-
-impl From<netdev::MacAddr> for MacAddr {
-    fn from(m: netdev::MacAddr) -> Self {
-        MacAddr(m.address())
-    }
-}
+pub type MacAddr = netdev::MacAddr;
 
 pub fn current_mac_gateway() -> Option<MacAddr> {
     netdev::get_default_gateway()

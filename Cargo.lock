@@ -139,6 +139,9 @@ name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "jni"
@@ -210,6 +213,9 @@ name = "mac-addr"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3d25b0e0b648a86960ac23b7ad4abb9717601dec6f66c165f5b037f3f03065f"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "memchr"
@@ -247,6 +253,7 @@ dependencies = [
  "objc2-system-configuration",
  "once_cell",
  "plist",
+ "serde",
  "windows-sys 0.61.2",
 ]
 
