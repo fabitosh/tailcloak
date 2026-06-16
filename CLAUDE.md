@@ -63,17 +63,18 @@ Each phase has a clear learning goal. Work phases sequentially — later phases 
 - **Concepts:** modules and visibility (`pub`, `mod`), `std::process::Command`, `String` vs `&str`, `Option<T>`, pattern matching (`match`, `if let`), `Option::is_some_and`, newtype pattern, `FromStr` trait
 - **Learning goal:** Rust's module system; ownership distinction between owned String and borrowed &str; newtypes for domain-meaningful validation
 
-### Phase 4: macOS SystemConfiguration — Gateway MAC Query
+### Phase 4: Gateway MAC Query (via `netdev`) ✅
 
-Goal: replace the `current_mac_gateway()` stub with a real lookup. Two-step problem:
+Goal: replace the `current_mac_gateway()` stub with a real lookup. **Pivoted away from the original SystemConfiguration + `arp` FFI plan** to the `netdev` crate, which reads interfaces/gateways cross-platform (and internally uses SystemConfiguration on macOS — see its `apple-system-configuration-extra` default feature, relevant for Phase 6).
 
-1. **Find the default gateway's IP + interface.** Use `SCDynamicStoreCopyValue` on key `State:/Network/Global/IPv4` → `CFDictionary` with `Router` (IP string) + `PrimaryInterface` (e.g. `en0`).
-2. **Resolve gateway IP → MAC via ARP.** Pragmatic path: shell out to `arp -n <ip>` and parse. Deeper FFI path (optional, later): `sysctl(NET_RT_FLAGS)` + walk `rt_msghdr` to read the kernel ARP table directly.
-
-- Add crates: `core-foundation`, `system-configuration`
-- **First exercise:** throwaway `examples/print_gateway.rs` that prints `(interface, gateway_ip)` before integrating. Lets you isolate the FFI learning.
-- **Concepts:** `unsafe` blocks, FFI, raw pointers, CoreFoundation's retain/release model vs Rust ownership, `CFDictionary` → `CFString` extraction, parsing subprocess output
-- **Learning goal:** how Rust exposes C APIs; when `unsafe` is necessary; reading crate docs to map thin wrappers around C types
+- [x] Dep: `netdev = { version = "0.44.0", features = ["serde"] }`. The `serde` feature provides `Serialize`/`Deserialize` on `netdev::MacAddr` (via the `mac-addr` crate) — needed for the config `HashSet`.
+- [x] `current_mac_gateway()` → `physical_gateway_mac(&netdev::get_interfaces())`, a pure, unit-tested selector.
+- [x] **Does NOT use `netdev::get_default_gateway()`.** A full-tunnel VPN (Tailscale exit node) becomes the *primary* network service, so the global default route points at the `utun` tunnel — no L2 gateway → all-zero MAC. Instead we iterate interfaces and read each *physical* interface's own `.gateway`, which is VPN-invariant.
+- [x] Selection logic: drop virtual interfaces (deny-list: `Tunnel | Loopback | PeerToPeerWireless`), then require a gateway whose MAC `is_unicast()` and `!= MacAddr::zero()` (netdev returns zero for unresolved/tunnel gateways).
+- [x] 6 unit tests over the pure `physical_gateway_mac(&[Interface])` seam, using `Interface::dummy()` fixtures (no system access).
+- [x] Throwaway `examples/probe_netdev.rs` dumps per-interface gateways — the before/after `tailscale down` invariance check.
+- **Concepts learned:** L2 vs L3 (MAC is per-hop/link-local, IP is end-to-end); the ARP cache & how `netstat -rn` folds it in (`L` flag); default route vs per-interface route; primary network service / VPN default-route hijack; pure-function test seams for system-dependent code.
+- **Learning goal (revised):** reading a crate's source to map its API + features; isolating impure system calls behind a testable pure core.
 
 ### Phase 5: CLI Subcommands (config management)
 
@@ -85,7 +86,7 @@ Goal: stop hand-editing `~/.config/tailcloak/config.toml`. Expose a CLI surface 
   - `tailcloak show-trusted` → print the trusted list (debug aid; may grow to print current gateway too)
 - **Argv dispatch in `main.rs`** via `std::env::args().nth(1).as_deref()` + `match`. Skeleton already in place with `todo!()` stubs.
 - **Building blocks to add in `src/config.rs`:**
-  - `impl Serialize for Config` + on `MacAddr` (currently `Deserialize`-only)
+  - `#[derive(Serialize)]` on `Config` (currently `Deserialize`-only). `MacAddr` already has `Serialize` from netdev's `serde` feature — no work there.
   - `Config::load_or_default()` → maps `io::ErrorKind::NotFound` to `Default::default()`, propagates anything else. Needed because `trust-current` is precisely the command users run *before* a config exists.
   - `Config::save(&self) -> Result<()>` → atomic-rename pattern (`.tmp` + `fs::rename`) to avoid half-written configs on crash. Creates parent dir with `fs::create_dir_all` if missing.
   - `Config::add_gateway(&mut self, mac: MacAddr) -> bool` → mirrors `HashSet::insert` semantics so the CLI can print "trusted" vs "already trusted".
@@ -126,14 +127,15 @@ Goal: stop hand-editing `~/.config/tailcloak/config.toml`. Expose a CLI surface 
 
 ## Session State (resume point)
 
-Last working session ended at the boundary of Phase 3 → Phase 4, after pivoting from SSID-based to gateway-MAC-based trust.
+Last working session completed Phase 4 (real gateway MAC via `netdev`) and the `MacAddr` → `netdev::MacAddr` pivot. **Next up: Phase 5 (CLI subcommands).**
 
 ### Current files
 
-- `src/main.rs` — returns `Result<_, Box<dyn Error>>`; argv dispatch via `match std::env::args().nth(1).as_deref()` with arms for `None` → `run_daemon_once()`, `trust-current` → `cmd_trust_current()`, `show-trusted` → `cmd_show_trusted()`, unknown → `eprintln + exit(2)`. Daemon path (`run_daemon_once`) computes `is_trusted` from `current_mac_gateway()` + `config.trusted_gateway_macs`. **`cmd_*` functions are `todo!()` stubs** awaiting Phase 5.
-- `src/config.rs` — loads `~/.config/tailcloak/config.toml` (XDG-aware) into `Config { trusted_gateway_macs: HashSet<MacAddr> }`
+- `src/main.rs` — returns `Result<_, Box<dyn Error>>`; argv dispatch via `match std::env::args().nth(1).as_deref()` with arms for `None` → `run_daemon_once()`, `trust-current` → `cmd_trust_current()`, `show-trusted` → `cmd_show_trusted()`, unknown → `eprintln + exit(2)`. `run_daemon_once` resolves the real gateway, prints it via `Display`, and computes `is_trusted`. **`cmd_*` functions are `todo!()` stubs** awaiting Phase 5.
+- `src/config.rs` — loads `~/.config/tailcloak/config.toml` (XDG-aware) into `Config { trusted_gateway_macs: HashSet<MacAddr> }`. Derives `Deserialize` only (Phase 5 adds `Serialize` + `save`/`load_or_default`/`add_gateway`).
 - `src/tailscale.rs` — `up()` / `down()` shelling out via `std::process::Command`, checking `ExitStatus::success()`
-- `src/network.rs` (was `wifi.rs`) — `MacAddr` newtype with `FromStr` validator (colon notation only, rejects dash notation explicitly); `current_mac_gateway() -> Option<MacAddr>` is a **stub** returning a hardcoded MAC, to be replaced in Phase 4
+- `src/network.rs` (was `wifi.rs`) — `pub use netdev::MacAddr`; **`current_mac_gateway()` is real**, delegating to a pure `physical_gateway_mac(&[Interface])` (physical-only, unicast non-zero gateway MAC) with 6 unit tests.
+- `examples/probe_netdev.rs` — throwaway per-interface gateway dump (untracked; keep as a learning aid or delete).
 
 ### Config file format (lives at `~/.config/tailcloak/config.toml`, outside the repo)
 
@@ -146,7 +148,7 @@ Renamed from `trusted_ssids` during the pivot — if you have an older config fi
 ### Key decisions made (don't relitigate)
 
 - **Trust identifier is the default gateway's MAC**, not SSID. Reasons: (a) MAC is harder to spoof than an SSID string, (b) stable across SSID rebrands within the same physical network, (c) avoids macOS Location Services permission prompt that recent macOS versions require for SSID reads via `CWWiFiClient`. Tradeoff: doesn't disambiguate Ethernet from Wi-Fi on the same gateway — fine for the threat model (the gateway *is* the network's identity).
-- **`MacAddr` is a newtype around `String`**, not `[u8; 6]`. Reason: keeps `FromStr` + `serde::Deserialize` simple, and the value is only ever compared for equality. If we ever need to render canonical form or compare with another representation, switch to `[u8; 6]`.
+- **`MacAddr` is `netdev::MacAddr`** (re-exported as `crate::network::MacAddr` via `pub use`), a `[u8; 6]`-backed type. **Superseded the earlier `MacAddr(String)` newtype** once `netdev` entered: netdev's type already derives `FromStr`, `Display`, `Hash`, `Eq`, and — with the `serde` feature — `Serialize`/`Deserialize`, so a wrapper added nothing. Tradeoff: lost the strict colon-only / 2-char-padded validation and the custom "dash notation unsupported" error; netdev's parser is more lenient. Acceptable because MACs now come from a trusted typed source (netdev), not just hand-edited config. (Original rationale for String-backing — "keeps FromStr + serde simple" — predated pulling in netdev, which now gives both for free.)
 - **`trusted_gateway_macs: HashSet<MacAddr>`**, not `Vec`. Reason: set semantics + `HashSet::contains` accepts `&MacAddr` via `Borrow`, cleaner than `Vec::contains`.
 - **Error handling pattern**: in the current "run once" code, `main` returns `Result` and uses `?` everywhere. In Phase 5's event handlers, will switch to **log-and-continue** (`if let Err(e) = ... { eprintln!(...) }`) so one failed toggle doesn't kill the daemon.
 - **No `is_tailscale_up` guard**. `tailscale up`/`down` confirmed fast on this machine; idempotent enough.
@@ -165,23 +167,22 @@ Renamed from `trusted_ssids` during the pivot — if you have an older config fi
 
 ### Known hazards / gotchas (don't get bitten again)
 
-- **macOS `arp` strips leading zeros from each octet.** Output looks like `f8:d:a9:c8:4:4`, the canonical form is `f8:0d:a9:c8:04:04`. The current `MacAddr::from_str` requires `p.len() == 2` per octet, so feeding `arp` output directly to it will **always fail validation**. Phase 4 parser must pre-pad each octet via `format!("{:02x}", u8::from_str_radix(p, 16)?)` *before* `parse::<MacAddr>()`. Strict validation stays in the type; normalization happens at the I/O boundary.
+- ~~**macOS `arp` strips leading zeros from each octet.**~~ **MOOT (Phase 4 used netdev).** We never shell out to `arp`; `netdev` returns `[u8; 6]` and formats via `{:02x}` (always zero-padded). Kept only so the lesson isn't re-learned: this hazard existed solely for the abandoned `arp`-parsing path.
 - **`tailscale up` requires network connectivity to authenticate.** Phase 4 will trigger this on untrusted networks where DNS/auth may be slow or rate-limited. If it becomes noisy, consider passing `--accept-routes=...` or similar to make the call cheaper, or add the `is_tailscale_up` guard we previously rejected.
 - **`current_mac_gateway()` returning `None` is interpreted as "untrusted"** in `run_daemon_once`. Means: lose Wi-Fi entirely → daemon tries `tailscale up`. Probably desired (paranoid default) but flag this if it ever causes surprises.
 
-### Next session start: continue Phase 4 / start Phase 5 prep
+### Next session start: Phase 5 (CLI subcommands)
 
-Phase 4 is the next functional milestone — Phase 5's `cmd_*` stubs do nothing useful until `current_mac_gateway()` returns a real value.
+Phase 4 is done, so the `cmd_*` stubs can now light up. Build order (config building blocks first, then wire the orchestrators):
 
-**Phase 4 plan:**
+1. **`config.rs` building blocks** (the thin, testable domain methods):
+   - `#[derive(Serialize)]` on `Config` (MacAddr's `Serialize` already comes from netdev).
+   - `Config::load_or_default()` — map `io::ErrorKind::NotFound` → `Config::default()`, propagate everything else. Needed because `trust-current` runs *before* a config exists. (`#[derive(Default)]` on `Config`.)
+   - `Config::save(&self)` — atomic write: serialize to a `.tmp` sibling, then `fs::rename`. `fs::create_dir_all` the parent first.
+   - `Config::add_gateway(&mut self, mac) -> bool` — wraps `HashSet::insert` so the CLI can say "trusted" vs "already trusted".
+2. **`main.rs` orchestrators** (cross-domain glue, stay out of the domain modules):
+   - `cmd_trust_current` — `load_or_default` → `current_mac_gateway()` (error if `None`) → `add_gateway` → `save`; print the outcome.
+   - `cmd_show_trusted` — `load_or_default` → print the set (and maybe the current gateway + whether it's trusted).
+3. **Tests:** a `config.rs` round-trip test (build a `Config`, `save` to a `tempdir`, `load`, assert equality) exercises `Serialize`/`Deserialize` + the atomic write without touching the real `~/.config`.
 
-1. **Crate selection:** `core-foundation` + `system-configuration` for the SCDynamicStore call. Confirm latest versions and that the public API covers `SCDynamicStoreCopyValue` returning a `CFDictionary`.
-2. **Two-step flow:**
-   - Step 1 — gateway IP + interface: `SCDynamicStoreCopyValue("State:/Network/Global/IPv4")` → dict with `Router` (string IP) + `PrimaryInterface` (e.g. `en0`).
-   - Step 2 — IP → MAC: shell out to `arp -n <ip>` and parse the MAC out (remember the leading-zero pad — see Hazards). Deep FFI option for later: `sysctl(NET_RT_FLAGS)` + `rt_msghdr` walk.
-3. **First exercise:** throwaway `examples/print_gateway.rs` that prints `(interface, gateway_ip, gateway_mac)`. Isolate the FFI + subprocess parsing before wiring into `main`.
-4. **Edge cases to handle:** no default gateway (no Wi-Fi, no Ethernet) → `None`; ARP entry missing/incomplete (`(incomplete)` in `arp` output) → `None`; multiple default routes (rare on macOS) → first one wins.
-
-**Phase 5 can start in parallel** with skeleton work — the building blocks in `config.rs` (`Serialize`, `load_or_default`, `save`, `add_gateway`) don't depend on Phase 4 and would let you test the read-modify-write cycle against a hand-edited config first. Then `cmd_trust_current` lights up the moment Phase 4 lands.
-
-After both, Phase 6 wires `SCDynamicStoreSetNotificationKeys` + `CFRunLoop` to make it event-driven (watching `State:/Network/Global/IPv4` for changes).
+Then Phase 6 wires `SCDynamicStoreSetNotificationKeys` + `CFRunLoop` for event-driven monitoring (watching `State:/Network/Global/IPv4`). Note netdev already links SystemConfiguration but does *not* expose change notifications — Phase 6 is still direct FFI.
