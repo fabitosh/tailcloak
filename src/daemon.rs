@@ -1,5 +1,4 @@
-//! Event-driven daemon: toggles Tailscale when the trusted-ness of the current
-//! physical network changes.
+//! Event-driven daemon acting on physical network changes.
 
 use crate::config::Config;
 use crate::{network, tailscale};
@@ -14,34 +13,14 @@ use system_configuration::dynamic_store::{
 /// SystemConfiguration keys whose changes signal the network may have switched:
 const WATCHED_KEYS: [&str; 2] = ["State:/Network/Global/IPv4", "State:/Network/Global/IPv6"];
 
-/// State threaded through every callback for the daemon's lifetime.
-///
-/// `applied_trust` records the trust decision behind our most recent toggle:
-/// `None` before the first decision, then `Some(true)` (we ran `tailscale
-/// down`) or `Some(false)` (we ran `tailscale up`). We only shell out to
-/// Tailscale when this flips.
-///
-/// It is *not* required for correctness — `tailscale up`/`down` are idempotent,
-/// so the daemon converges either way. But the watched keys fire on more than
-/// network switches (toggling Tailscale itself re-fires this callback, as do
-/// things like DHCP renewals), so the guard avoids a redundant subprocess spawn
-/// and keeps the log to one line per genuine change.
-struct State {
-    applied_trust: Option<bool>,
-}
-
-/// Runs the event-driven daemon: applies policy to the current network, then
-/// blocks on the run loop, re-applying whenever the watched state changes.
+/// Runs the event-driven daemon: reconciles the current network
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let mut state = State {
-        applied_trust: None,
-    };
-    reconcile(&mut state); // apply to the current network before we start watching
+    reconcile(); // reconcile the current network before we start watching
 
     let store = SCDynamicStoreBuilder::new("com.fabitosh.tailcloak")
         .callback_context(SCDynamicStoreCallBackContext {
             callout: on_network_change,
-            info: state,
+            info: (),
         })
         .build()
         .ok_or("could not create SCDynamicStore session")?;
@@ -63,24 +42,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Applies policy a single time, without watching. Useful for testing and as a
+/// Reconciles a single time, without watching. Useful for testing and as a
 /// manual one-shot trigger.
 pub fn run_once() -> Result<(), Box<dyn std::error::Error>> {
-    let mut state = State {
-        applied_trust: None,
-    };
-    reconcile(&mut state);
+    reconcile();
     Ok(())
 }
 
-fn on_network_change(_store: SCDynamicStore, _changed_keys: CFArray<CFString>, state: &mut State) {
-    reconcile(state);
+fn on_network_change(_store: SCDynamicStore, _changed_keys: CFArray<CFString>, _info: &mut ()) {
+    reconcile();
 }
 
-/// Resolves the current physical gateway, decides trusted vs. not, and toggles
-/// Tailscale — but only when the decision changed since last time. Errors are
-/// logged, never propagated: one failure must not bring the daemon down.
-fn reconcile(state: &mut State) {
+/// Errors are logged, never propagated — one failure must not bring the daemon down.
+fn reconcile() {
     let config = match Config::load_or_default() {
         Ok(config) => config,
         Err(e) => {
@@ -91,29 +65,18 @@ fn reconcile(state: &mut State) {
 
     let gateway = network::current_mac_gateway();
     let trusted = gateway.is_some_and(|mac| config.trusted_gateway_macs.contains(&mac));
-
-    if state.applied_trust == Some(trusted) {
-        // Same decision as last time: nothing to do. This is what filters the
-        // self-triggered re-fire and other spurious notifications
-        return;
-    }
-
     let result = if trusted {
         tailscale::down()
     } else {
         tailscale::up()
     };
+    let gw = gateway.map_or_else(|| "none".to_string(), |mac| mac.to_string());
     match result {
-        Ok(()) => {
-            let gw = gateway.map_or_else(|| "none".to_string(), |mac| mac.to_string());
-            let verdict = if trusted {
-                "trusted -> tailscale down"
-            } else {
-                "untrusted -> tailscale up"
-            };
-            println!("tailcloak: gateway {gw}, {verdict}");
-            state.applied_trust = Some(trusted);
-        }
+        Ok(()) => println!(
+            "tailcloak: gateway {gw} {} -> tailscale {}",
+            if trusted { "trusted" } else { "untrusted" },
+            if trusted { "down" } else { "up" }
+        ),
         Err(e) => eprintln!("tailcloak: failed to toggle tailscale: {e}"),
     }
 }
