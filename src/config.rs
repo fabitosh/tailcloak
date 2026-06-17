@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::network::MacAddr;
 
-#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Config {
     pub trusted_gateway_macs: HashSet<MacAddr>,
 }
@@ -78,4 +78,80 @@ fn xdg_config_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
     }
     let home = dirs::home_dir().ok_or("could not determine home directory")?;
     Ok(home.join(".config"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn mac(s: &str) -> MacAddr {
+        s.parse().expect("valid test MAC")
+    }
+
+    #[test]
+    fn save_then_load_round_trips() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let mut config = Config::default();
+        config.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"));
+        config.add_trusted_gateway(mac("00:11:22:33:44:55"));
+        config.save_to(&path).unwrap();
+
+        let loaded = Config::load_from(&path).unwrap();
+        assert_eq!(loaded, config);
+    }
+
+    #[test]
+    fn load_from_missing_file_is_default() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("does-not-exist.toml");
+
+        let loaded = Config::load_from(&path).unwrap();
+        assert_eq!(loaded, Config::default());
+        assert!(loaded.trusted_gateway_macs.is_empty());
+    }
+
+    #[test]
+    fn save_overwrites_prior_contents() {
+        // The atomic rename must replace the file wholesale, not merge into it.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let mut first = Config::default();
+        first.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"));
+        first.save_to(&path).unwrap();
+
+        let mut second = Config::default();
+        second.add_trusted_gateway(mac("00:11:22:33:44:55"));
+        second.save_to(&path).unwrap();
+
+        assert_eq!(Config::load_from(&path).unwrap(), second);
+    }
+
+    #[test]
+    fn add_trusted_gateway_reports_novelty() {
+        let mut config = Config::default();
+        assert!(config.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"))); // newly added
+        assert!(!config.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"))); // already present
+        assert_eq!(config.trusted_gateway_macs.len(), 1);
+    }
+
+    #[test]
+    fn remove_trusted_gateway_reports_presence() {
+        let mut config = Config::default();
+        config.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"));
+        assert!(config.remove_trusted_gateway(mac("d8:ec:e5:af:d0:29"))); // was present
+        assert!(!config.remove_trusted_gateway(mac("d8:ec:e5:af:d0:29"))); // already gone
+        assert!(config.trusted_gateway_macs.is_empty());
+    }
+
+    #[test]
+    fn show_trusted_formats_a_single_mac() {
+        // Multi-element order is unspecified (HashSet), so assert on one entry.
+        let mut config = Config::default();
+        config.add_trusted_gateway(mac("d8:ec:e5:af:d0:29"));
+        assert_eq!(config.show_trusted(), "d8:ec:e5:af:d0:29");
+    }
 }
