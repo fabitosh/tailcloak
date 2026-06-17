@@ -55,6 +55,10 @@ impl Config {
         self.trusted_gateway_macs.insert(mac)
     }
 
+    pub fn remove_trusted_gateway(&mut self, mac: MacAddr) -> bool {
+        self.trusted_gateway_macs.remove(&mac)
+    }
+
     pub fn show_trusted(&self) -> String {
         self.trusted_gateway_macs
             .iter()

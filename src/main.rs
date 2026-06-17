@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match std::env::args().nth(1).as_deref() {
         None => run_daemon_once(),
         Some("trust-current") => cmd_trust_current(),
+        Some("distrust-current") => cmd_distrust_current(),
         Some("show-trusted") => cmd_show_trusted(),
         Some(other) => {
             eprintln!("Unknown argument {other}");
@@ -23,6 +24,19 @@ fn cmd_trust_current() -> Result<(), Box<dyn std::error::Error>> {
         println!("Now trusting gateway {current_gateway}");
     } else {
         println!("Gateway {current_gateway} is already trusted")
+    }
+    Ok(())
+}
+
+fn cmd_distrust_current() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config = config::Config::load_or_default()?;
+    let current_gateway = network::current_mac_gateway()
+        .ok_or("No physical gateway found - are you on a network?")?;
+    if config.remove_trusted_gateway(current_gateway) {
+        config.save()?;
+        println!("No longer trusting gateway {current_gateway}");
+    } else {
+        println!("Gateway {current_gateway} was not trusted");
     }
     Ok(())
 }
