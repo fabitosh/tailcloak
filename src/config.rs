@@ -1,21 +1,54 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 
 use crate::network::MacAddr;
 
-#[derive(serde::Deserialize)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Config {
     pub trusted_gateway_macs: HashSet<MacAddr>,
 }
 
 impl Config {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load_or_default() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::load_from(&config_path()?)
+    }
+
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let path = config_path()?;
-        let contents = fs::read_to_string(&path)?;
-        let config: Config = toml::from_str(&contents)?;
-        Ok(config)
+        self.save_to(&path)
+    }
+
+    fn load_from(path: &Path) -> Result<Config, Box<dyn std::error::Error>> {
+        match fs::read_to_string(path) {
+            Ok(contents) => Ok(toml::from_str(&contents)?),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Config::default()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn save_to(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        // ensure parent directories exists
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let contents = toml::to_string_pretty(self)?;
+
+        // avoid half-written config file on crash
+        let tmp = path.with_extension("toml.tmp");
+        let write_and_swap = || -> Result<(), Box<dyn std::error::Error>> {
+            fs::write(&tmp, &contents)?;
+            fs::rename(&tmp, path)?;
+            Ok(())
+        };
+
+        // remove tmp file if successful
+        write_and_swap().inspect_err(|_| {
+            let _ = fs::remove_file(&tmp);
+        })
     }
 }
 fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {

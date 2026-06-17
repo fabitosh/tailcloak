@@ -15,7 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn cmd_trust_current() -> Result<(), Box<dyn std::error::Error>> {
-    todo!()
+    let mut config = config::Config::load_or_default()?;
+    let current_gateway = network::current_mac_gateway()
+        .ok_or("No physical gateway found - are you on a network?")?;
+    Ok(())
 }
 
 fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +26,7 @@ fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_daemon_once() -> Result<(), Box<dyn std::error::Error>> {
-    let config = config::Config::load().expect("failed to load config");
+    let config = config::Config::load_or_default().expect("failed to load config");
     let trusted: Vec<String> = config
         .trusted_gateway_macs
         .iter()
