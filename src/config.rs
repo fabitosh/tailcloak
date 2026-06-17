@@ -50,6 +50,10 @@ impl Config {
             let _ = fs::remove_file(&tmp);
         })
     }
+
+    pub fn add_trusted_gateway(&mut self, mac: MacAddr) -> bool {
+        self.trusted_gateway_macs.insert(mac)
+    }
 }
 fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let base = xdg_config_home()?;

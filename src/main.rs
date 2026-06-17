@@ -18,6 +18,12 @@ fn cmd_trust_current() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = config::Config::load_or_default()?;
     let current_gateway = network::current_mac_gateway()
         .ok_or("No physical gateway found - are you on a network?")?;
+    if config.add_trusted_gateway(current_gateway) {
+        config.save()?;
+        println!("Now trusting gateway {current_gateway}");
+    } else {
+        println!("Gateway {current_gateway} is already trusted")
+    }
     Ok(())
 }
 
