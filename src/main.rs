@@ -28,17 +28,16 @@ fn cmd_trust_current() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
-    todo!()
+    let config = config::Config::load_or_default()?;
+    let trusted = config.show_trusted();
+    println!("trusted gateway MACs: {trusted}");
+    Ok(())
 }
 
 fn run_daemon_once() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::load_or_default().expect("failed to load config");
-    let trusted: Vec<String> = config
-        .trusted_gateway_macs
-        .iter()
-        .map(|mac| mac.to_string())
-        .collect();
-    println!("trusted gateway MACs: [{}]", trusted.join(", "));
+    let trusted = config.show_trusted();
+    println!("trusted gateway MACs: {trusted}");
 
     let current_gateway = network::current_mac_gateway();
     match &current_gateway {

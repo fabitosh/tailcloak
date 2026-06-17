@@ -54,6 +54,14 @@ impl Config {
     pub fn add_trusted_gateway(&mut self, mac: MacAddr) -> bool {
         self.trusted_gateway_macs.insert(mac)
     }
+
+    pub fn show_trusted(&self) -> String {
+        self.trusted_gateway_macs
+            .iter()
+            .map(|m| m.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let base = xdg_config_home()?;
