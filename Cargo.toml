@@ -9,3 +9,6 @@ netdev = { version = "0.44.0", features = ["serde"] }
 dirs = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.2"
+
+[dev-dependencies]
+tempfile = "3"
