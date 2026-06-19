@@ -5,6 +5,7 @@ mod config;
 mod daemon;
 mod launchd;
 mod network;
+mod pause;
 mod tailscale;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,13 +21,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("tailcloak: resumed");
             Ok(())
         }
-        Some("install") => launchd::install(),
-        Some("uninstall") => launchd::uninstall(),
+        Some("service") => cmd_service(std::env::args().nth(2).as_deref()),
+        Some("--help" | "-h" | "help") => {
+            print_usage();
+            Ok(())
+        }
+        Some("--version" | "-V") => {
+            println!("tailcloak {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
         Some(other) => {
-            eprintln!("Unknown argument {other}");
+            eprintln!("Unknown argument {other}\nRun `tailcloak --help` for usage.");
             std::process::exit(2);
         }
     }
+}
+
+fn print_usage() {
+    println!(
+        "tailcloak — toggle Tailscale based on trusted gateway MAC addresses (macOS)\n\
+         \n\
+         Usage: tailcloak [COMMAND]\n\
+         \n\
+         Commands:\n\
+         \x20 (none)             Run the daemon in the foreground (what the LaunchAgent runs)\n\
+         \x20 run-once           Reconcile once and exit\n\
+         \x20 trust-current      Trust the current network's gateway\n\
+         \x20 distrust-current   Untrust the current network's gateway\n\
+         \x20 show-trusted       List trusted gateway MACs\n\
+         \x20 pause <minutes>    Suspend toggling for N minutes (manual override); 0 resumes\n\
+         \x20 resume             Resume toggling now\n\
+         \x20 service install    Install and start the LaunchAgent\n\
+         \x20 service uninstall  Stop and remove the LaunchAgent\n\
+         \n\
+         Options:\n\
+         \x20 -h, --help         Print this help\n\
+         \x20 -V, --version      Print version"
+    );
 }
 
 fn cmd_trust_current() -> Result<(), Box<dyn std::error::Error>> {
@@ -61,6 +92,23 @@ fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
     println!("trusted gateway MACs: {trusted}");
     Ok(())
 }
+
+/// `service <install|uninstall>` — namespaced so it reads as managing the
+/// background agent, not the `tailcloak` binary itself (that's `cargo`'s job).
+fn cmd_service(sub: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    match sub {
+        Some("install") => launchd::install(),
+        Some("uninstall") => launchd::uninstall(),
+        other => {
+            if let Some(other) = other {
+                eprintln!("Unknown service command {other}");
+            }
+            eprintln!("Usage: tailcloak service <install|uninstall>");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn cmd_pause(arg: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let minutes: u64 = arg
         .ok_or("usage: tailcloak pause <minutes>")?
