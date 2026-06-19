@@ -55,14 +55,6 @@ fn plist_contents(exe: &Path, log: &Path) -> String {
     <array>
         <string>{exe}</string>
     </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <!-- launchd's default PATH is just /usr/bin:/bin:/usr/sbin:/sbin and
-             omits where `tailscale` lives. Cover Homebrew (Intel + Apple
-             Silicon) and the Tailscale.app CLI shim in /usr/local/bin. -->
-        <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -86,6 +78,15 @@ fn plist_contents(exe: &Path, log: &Path) -> String {
 /// Idempotent: an already-loaded job is booted out first so `bootstrap` won't
 /// fail with "service already loaded".
 pub fn install() -> Result<(), Box<dyn std::error::Error>> {
+    if crate::tailscale::resolve().is_none() {
+        eprintln!(
+            "tailcloak: WARNING — `tailscale` CLI not found in any standard location.\n\
+             The daemon cannot toggle Tailscale until it is installed \
+             (https://tailscale.com/download).\n\
+             Installing the agent anyway; it will start working once Tailscale is present."
+        );
+    }
+
     let exe = env::current_exe()?.canonicalize()?;
     let plist = plist_path()?;
     let log = log_path()?;
@@ -147,6 +148,5 @@ mod tests {
         assert!(xml.contains("/Users/me/Library/Logs/tailcloak.log"));
         assert!(xml.contains(&format!("<string>{LABEL}</string>")));
         assert!(xml.contains("<key>RunAtLoad</key>\n    <true/>"));
-        assert!(xml.contains("<key>PATH</key>"));
     }
 }
