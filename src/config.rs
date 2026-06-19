@@ -68,16 +68,24 @@ impl Config {
     }
 }
 fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let base = xdg_config_home()?;
-    Ok(base.join("tailcloak").join("config.toml"))
+    Ok(config_dir()?.join("config.toml"))
 }
 
-fn xdg_config_home() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if let Some(dir) = env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
+pub fn config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(xdg_dir("XDG_CONFIG_HOME", ".config")?.join("tailcloak"))
+}
+
+/// runtime state (the pause window)
+pub fn state_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    Ok(xdg_dir("XDG_STATE_HOME", ".local/state")?.join("tailcloak"))
+}
+
+fn xdg_dir(var: &str, fallback: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(dir) = env::var_os(var).filter(|v| !v.is_empty()) {
         return Ok(PathBuf::from(dir));
     }
     let home = dirs::home_dir().ok_or("could not determine home directory")?;
-    Ok(home.join(".config"))
+    Ok(home.join(fallback))
 }
 
 #[cfg(test)]
