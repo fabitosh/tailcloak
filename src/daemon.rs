@@ -17,7 +17,7 @@ const WATCHED_KEYS: [&str; 2] = ["State:/Network/Global/IPv4", "State:/Network/G
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     reconcile(); // reconcile the current network before we start watching
 
-    let store = SCDynamicStoreBuilder::new("com.fabitosh.tailcloak")
+    let store = SCDynamicStoreBuilder::new(crate::launchd::LABEL)
         .callback_context(SCDynamicStoreCallBackContext {
             callout: on_network_change,
             info: (),

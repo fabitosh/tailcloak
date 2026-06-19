@@ -1,5 +1,6 @@
 mod config;
 mod daemon;
+mod launchd;
 mod network;
 mod tailscale;
 
@@ -10,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("trust-current") => cmd_trust_current(),
         Some("distrust-current") => cmd_distrust_current(),
         Some("show-trusted") => cmd_show_trusted(),
+        Some("install") => launchd::install(),
+        Some("uninstall") => launchd::uninstall(),
         Some(other) => {
             eprintln!("Unknown argument {other}");
             std::process::exit(2);
