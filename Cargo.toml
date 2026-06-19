@@ -8,6 +8,7 @@ repository = "https://github.com/fabitosh/tailcloak"
 readme = "README.md"
 keywords = ["tailscale", "vpn", "macos", "launchd", "networking"]
 categories = ["command-line-utilities"]
+exclude = ["CLAUDE.md", ".claude"]
 
 # macOS-only crate; build docs only for a Darwin target so docs.rs doesn't fail.
 [package.metadata.docs.rs]
