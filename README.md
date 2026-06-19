@@ -35,7 +35,7 @@ network — is always `up`.
 ## Install
 
 ```sh
-cargo install --path .     # builds and installs the binary to ~/.cargo/bin
+cargo install tailcloak    # from crates.io  (or: cargo install --path . from a clone)
 tailcloak install          # writes a LaunchAgent and starts it at login
 ```
 

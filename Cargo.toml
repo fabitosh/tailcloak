@@ -1,9 +1,14 @@
 [package]
 name = "tailcloak"
-authors = ["fabitosh"]
 version = "0.1.0"
 edition = "2024"
+description = "Automatically toggle Tailscale on/off based on trusted default-gateway MAC addresses (macOS)"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/fabitosh/tailcloak"
+readme = "README.md"
+keywords = ["tailscale", "vpn", "macos", "launchd", "networking"]
+categories = ["command-line-utilities"]
+
 # macOS-only crate; build docs only for a Darwin target so docs.rs doesn't fail.
 [package.metadata.docs.rs]
 targets = ["aarch64-apple-darwin"]
