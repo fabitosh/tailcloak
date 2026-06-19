@@ -3,6 +3,9 @@ name = "tailcloak"
 authors = ["fabitosh"]
 version = "0.1.0"
 edition = "2024"
+# macOS-only crate; build docs only for a Darwin target so docs.rs doesn't fail.
+[package.metadata.docs.rs]
+targets = ["aarch64-apple-darwin"]
 
 [dependencies]
 netdev = { version = "0.44.0", features = ["serde"] }

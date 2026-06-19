@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "macos"))]
+compile_error!("tailcloak only supports macOS (it relies on SystemConfiguration and the Tailscale CLI).");
+
 mod config;
 mod daemon;
 mod launchd;
