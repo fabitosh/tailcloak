@@ -1,7 +1,7 @@
 //! Event-driven daemon acting on physical network changes.
 
 use crate::config::Config;
-use crate::{network, tailscale};
+use crate::{network, pause, tailscale};
 
 use core_foundation::array::CFArray;
 use core_foundation::runloop::{CFRunLoop, kCFRunLoopCommonModes};
@@ -55,6 +55,14 @@ fn on_network_change(_store: SCDynamicStore, _changed_keys: CFArray<CFString>, _
 
 /// Errors are logged, never propagated — one failure must not bring the daemon down.
 fn reconcile() {
+    if let Some(left) = pause::remaining() {
+        println!(
+            "tailcloak: paused ({} min left) — leaving Tailscale unchanged",
+            left.as_secs().div_ceil(60)
+        );
+        return;
+    }
+
     let config = match Config::load_or_default() {
         Ok(config) => config,
         Err(e) => {

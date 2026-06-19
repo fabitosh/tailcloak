@@ -14,6 +14,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("trust-current") => cmd_trust_current(),
         Some("distrust-current") => cmd_distrust_current(),
         Some("show-trusted") => cmd_show_trusted(),
+        Some("pause") => cmd_pause(std::env::args().nth(2).as_deref()),
+        Some("resume") => {
+            pause::clear()?;
+            println!("tailcloak: resumed");
+            Ok(())
+        }
         Some("install") => launchd::install(),
         Some("uninstall") => launchd::uninstall(),
         Some(other) => {
@@ -53,5 +59,19 @@ fn cmd_show_trusted() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::load_or_default()?;
     let trusted = config.show_trusted();
     println!("trusted gateway MACs: {trusted}");
+    Ok(())
+}
+fn cmd_pause(arg: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let minutes: u64 = arg
+        .ok_or("usage: tailcloak pause <minutes>")?
+        .parse()
+        .map_err(|_| "pause expects a whole number of minutes")?;
+    pause::set(minutes)?;
+    match minutes {
+        0 => println!("tailcloak: resumed"),
+        _ => println!(
+            "tailcloak: paused for {minutes} min — manual `tailscale up`/`down` will stick until it ends"
+        ),
+    }
     Ok(())
 }
