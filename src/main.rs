@@ -16,11 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("distrust-current") => cmd_distrust_current(),
         Some("show-trusted") => cmd_show_trusted(),
         Some("pause") => cmd_pause(std::env::args().nth(2).as_deref()),
-        Some("resume") => {
-            pause::clear()?;
-            println!("tailcloak: resumed");
-            Ok(())
-        }
+        Some("resume") => cmd_resume(),
         Some("service") => cmd_service(std::env::args().nth(2).as_deref()),
         Some("--help" | "-h" | "help") => {
             print_usage();
@@ -49,8 +45,8 @@ fn print_usage() {
          \x20 trust-current      Trust the current network's gateway\n\
          \x20 distrust-current   Untrust the current network's gateway\n\
          \x20 show-trusted       List trusted gateway MACs\n\
-         \x20 pause <minutes>    Suspend toggling for N minutes (manual override); 0 resumes\n\
-         \x20 resume             Resume toggling now\n\
+         \x20 pause <minutes>    Take Tailscale down and pause toggling for N min (0 = resume)\n\
+         \x20 resume             Reconcile now and resume toggling\n\
          \x20 service install    Install and start the LaunchAgent\n\
          \x20 service uninstall  Stop and remove the LaunchAgent\n\
          \n\
@@ -109,17 +105,26 @@ fn cmd_service(sub: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+/// Drops Tailscale and stops the daemon toggling for `minutes` — for joining a
+/// captive network or otherwise overriding by hand. `0` is treated as `resume`.
 fn cmd_pause(arg: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let minutes: u64 = arg
         .ok_or("usage: tailcloak pause <minutes>")?
         .parse()
         .map_err(|_| "pause expects a whole number of minutes")?;
-    pause::set(minutes)?;
-    match minutes {
-        0 => println!("tailcloak: resumed"),
-        _ => println!(
-            "tailcloak: paused for {minutes} min — manual `tailscale up`/`down` will stick until it ends"
-        ),
+    if minutes == 0 {
+        return cmd_resume();
     }
+    pause::set(minutes)?;
+    tailscale::down()?;
+    println!("tailcloak: paused for {minutes} min — Tailscale down; `tailcloak resume` to restore");
     Ok(())
+}
+
+/// Clears the pause window and reconciles now, so protection is restored
+/// immediately rather than waiting for the next network change.
+fn cmd_resume() -> Result<(), Box<dyn std::error::Error>> {
+    pause::clear()?;
+    println!("tailcloak: resumed");
+    daemon::run_once()
 }
