@@ -38,18 +38,31 @@ otherwise (incl. no network)       ->  tailscale up
 ## Requirements
 
 - macOS
-- Rust
 - [Tailscale](https://tailscale.com/) installed
 
 ## Install
 
+Install the binary with Homebrew:
+
 ```sh
-cargo install tailcloak
-tailcloak service install  # writes a LaunchAgent and starts it at login
+brew install fabitosh/tap/tailcloak
 ```
 
-The two steps are deliberately separate: `cargo` owns the binary, while
-`tailcloak service` owns the background agent. You can use tailcloak without the service.
+or with cargo:
+
+```sh
+cargo install tailcloak
+```
+
+Then start the background agent:
+
+```sh
+tailcloak service install
+```
+
+The two steps are deliberately separate: the package manager owns the binary,
+while `tailcloak service` owns the background agent. You can use tailcloak
+without the service.
 
 Re-running `tailcloak service install` after an upgrade is safe — it reloads the
 agent.
@@ -99,9 +112,17 @@ launchctl print gui/$(id -u)/dev.fmeier.tailcloak    # inspect the launchd job
 
 ## Uninstall
 
+First stop and remove the background agent:
+
 ```sh
-tailcloak service uninstall   # stop and remove the background agent
-cargo uninstall tailcloak     # remove the binary (if installed via cargo)
+tailcloak service uninstall
+```
+
+Then remove the binary the same way you installed it:
+
+```sh
+brew uninstall tailcloak       # if installed via Homebrew
+cargo uninstall tailcloak      # if installed via cargo
 ```
 
 ## License
