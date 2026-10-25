@@ -8,7 +8,7 @@ A lightweight, native macOS background daemon in Rust that toggles Tailscale bas
 
 ## Status
 
-**Complete and ready to publish.** Event-driven daemon + launchd deployment + crates.io packaging (dual MIT/Apache-2.0) all done. `cargo clippy` + `cargo test` (18 tests) green. Env: Rust stable, aarch64-apple-darwin.
+**Complete and ready to publish.** Event-driven daemon + launchd deployment + crates.io packaging (dual MIT/Apache-2.0) all done. `cargo clippy` + `cargo test` (16 tests) green. Env: Rust stable, aarch64-apple-darwin.
 
 Built incrementally: config → tailscale subprocess → gateway detection → CLI → event-driven daemon → launchd deploy → crates.io packaging → publish polish (`service` namespacing, `pause`/`resume`, `--help`/`--version`).
 
@@ -18,7 +18,7 @@ Possible follow-ups (not started): dedupe redundant `tailscale up/down` calls (a
 
 - `src/main.rs` — argv dispatch. `None` → `daemon::run()`; `run-once` → `daemon::run_once()`; `trust-current`/`distrust-current`/`show-trusted`/`pause`/`resume`/`service` → `cmd_*` (cross-module orchestrators); `service <install|uninstall>` is dispatched on `nth(2)` inside `cmd_service`; `pause 0` delegates to `cmd_resume`; `--help`/`-h`/`help` → `print_usage()`; `--version`/`-V` → `CARGO_PKG_VERSION`; unknown → exit 2. Non-macOS builds fail via `compile_error!`.
 - `src/daemon.rs` — SCDynamicStore watches `State:/Network/Global/IPv4`+`IPv6`; CFRunLoop drives a level-triggered `reconcile()` (pause guard → load config → resolve gateway → toggle Tailscale), log-and-continue.
-- `src/network.rs` — `pub use netdev::MacAddr`; `current_mac_gateway()` → pure `physical_gateway_mac(&[Interface])`.
+- `src/network.rs` — `pub use netdev::MacAddr`; `current_mac_gateway()` reads `ARPResolvedHardwareAddress` from SCDynamicStore `State:/Network/Service/*/IPv4` (macOS 27 redacts MACs from the ARP sysctl + `getifaddrs` for unentitled processes); pure `parse_resolved(&str)`.
 - `src/tailscale.rs` — `resolve()` (absolute path from standard macOS locations) + `up()`/`down()`.
 - `src/config.rs` — `Config { trusted_gateway_macs: HashSet<MacAddr> }`; `load_or_default`, atomic `save`, `add/remove_trusted_gateway`, `show_trusted`; `pub config_dir()` + `pub state_dir()` over a shared `xdg_dir(var, fallback)` helper. Private `load_from`/`save_to(&Path)` test seams.
 - `src/pause.rs` — temporary-override window. `set`/`clear`/`remaining` over a `pause-until` Unix-timestamp file in `state_dir()` (ephemeral runtime state, not config); reads **fail open** (missing/expired/garbage → not paused). Pure `set_at`/`clear_at`/`remaining_at(&Path, SystemTime)` test seams.
