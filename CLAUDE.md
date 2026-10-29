@@ -18,13 +18,13 @@ Possible follow-ups (not started): dedupe redundant `tailscale up/down` calls (a
 
 - `src/main.rs` — argv dispatch. `None` → `daemon::run()`; `run-once` → `daemon::run_once()`; `trust-current`/`distrust-current`/`show-trusted`/`pause`/`resume`/`service` → `cmd_*` (cross-module orchestrators); `service <install|uninstall>` is dispatched on `nth(2)` inside `cmd_service`; `pause 0` delegates to `cmd_resume`; `--help`/`-h`/`help` → `print_usage()`; `--version`/`-V` → `CARGO_PKG_VERSION`; unknown → exit 2. Non-macOS builds fail via `compile_error!`.
 - `src/daemon.rs` — SCDynamicStore watches `State:/Network/Global/IPv4`+`IPv6`; CFRunLoop drives a level-triggered `reconcile()` (pause guard → load config → resolve gateway → toggle Tailscale), log-and-continue.
-- `src/network.rs` — `pub use netdev::MacAddr`; `current_mac_gateway()` reads `ARPResolvedHardwareAddress` from SCDynamicStore `State:/Network/Service/*/IPv4` (macOS 27 redacts MACs from the ARP sysctl + `getifaddrs` for unentitled processes); pure `parse_resolved(&str)`.
+- `src/network.rs` — `pub use mac_addr::MacAddr`; `current_mac_gateway()` reads `ARPResolvedHardwareAddress` from SCDynamicStore `State:/Network/Service/*/IPv4` (macOS 27 redacts MACs from the ARP sysctl + `getifaddrs` for unentitled processes); pure `parse_resolved(&str)`.
 - `src/tailscale.rs` — `resolve()` (absolute path from standard macOS locations) + `up()`/`down()`.
 - `src/config.rs` — `Config { trusted_gateway_macs: HashSet<MacAddr> }`; `load_or_default`, atomic `save`, `add/remove_trusted_gateway`, `show_trusted`; `pub config_dir()` + `pub state_dir()` over a shared `xdg_dir(var, fallback)` helper. Private `load_from`/`save_to(&Path)` test seams.
 - `src/pause.rs` — temporary-override window. `set`/`clear`/`remaining` over a `pause-until` Unix-timestamp file in `state_dir()` (ephemeral runtime state, not config); reads **fail open** (missing/expired/garbage → not paused). Pure `set_at`/`clear_at`/`remaining_at(&Path, SystemTime)` test seams.
 - `src/launchd.rs` — `LABEL` const (`dev.fmeier.tailcloak`; single source of truth for plist Label, filename, store session); `install`/`uninstall` (driven via `service` subcommand); pure `plist_contents()`.
 
-**Deps:** `netdev` (serde), `serde`, `toml`, `dirs`, `system-configuration`, `core-foundation`; `tempfile` (dev).
+**Deps:** `mac-addr` (serde), `serde`, `toml`, `dirs`, `system-configuration`, `core-foundation`; `tempfile` (dev).
 
 **Config** (`~/.config/tailcloak/config.toml`, outside the repo):
 
@@ -35,7 +35,7 @@ trusted_gateway_macs = ["aa:bb:cc:dd:ee:ff", "00:11:22:33:44:55"]
 ## Key decisions (don't relitigate)
 
 - **Trust by gateway MAC, not SSID** — harder to spoof, stable across rebrands, no Location Services prompt. Apple redacts SSIDs in the terminal.
-- **`MacAddr` = `netdev::MacAddr`** (`pub use`) — `[u8;6]`-backed, free FromStr/Display/Hash/Eq/serde.
+- **`MacAddr` = `mac_addr::MacAddr`** (`pub use`) — `[u8;6]`-backed, free FromStr/Display/Hash/Eq/serde. Same type netdev re-exports; depended on directly since gateway lookup moved to SCDynamicStore, dropping netdev's ~40-crate platform layer.
 - **Per-interface gateway, never the global default route** — a full-tunnel VPN hijacks the global route to `utun` (zero MAC); physical interfaces keep their DHCP gateway. Selector drops virtual interfaces and requires a unicast, non-zero MAC.
 - **Daemon is level-triggered + self-healing** — `reconcile()` re-asserts desired state on every change and ignores manual overrides; that's the security guarantee.
 - **`system-configuration` + `core-foundation` crates, not hand-rolled FFI** — CFRunLoop is single-threaded, so no `Arc`/`Mutex`.

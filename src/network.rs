@@ -3,7 +3,7 @@ use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::CFString;
 use system_configuration::dynamic_store::SCDynamicStoreBuilder;
 
-pub use netdev::MacAddr;
+pub use mac_addr::MacAddr;
 
 /// MAC of the physical network's default gateway, or `None` when no physical
 /// gateway can be resolved (no link, or the router is not ARP-verified yet).
