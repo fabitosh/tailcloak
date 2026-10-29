@@ -1,6 +1,6 @@
 [package]
 name = "tailcloak"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Automatically toggle Tailscale on/off based on trusted default-gateway MAC addresses (macOS)"
 license = "MIT OR Apache-2.0"
