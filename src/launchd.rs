@@ -7,7 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::{env, fs, io};
+use std::time::Duration;
+use std::{env, fs, io, thread};
 
 /// Reverse-DNS service identifier. Single source of truth for the launchd job
 /// `Label`, the plist filename, and the `SCDynamicStore` session name.
@@ -104,17 +105,34 @@ pub fn install() -> Result<(), Box<dyn std::error::Error>> {
     let _ = Command::new("launchctl").args(["bootout", &target]).output();
 
     let plist_str = plist.to_str().ok_or("plist path is not valid UTF-8")?;
-    let status = Command::new("launchctl")
-        .args(["bootstrap", &domain, plist_str])
-        .status()?;
-    if !status.success() {
-        return Err(format!("launchctl bootstrap failed ({status})").into());
-    }
+    bootstrap(&domain, plist_str)?;
 
     println!("tailcloak: installed and started");
     println!("  agent: {}", plist.display());
     println!("  logs:  {}", log.display());
     Ok(())
+}
+
+/// Loads the plist into `domain`, retrying briefly. Replacing a long-running
+/// agent intermittently fails with EIO (exit 5) right after `bootout`, while
+/// launchd is still tearing the old job down; a re-run moments later succeeds.
+/// Bounded at ~3 s and install-time only — the daemon itself never polls.
+fn bootstrap(domain: &str, plist: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut attempts = 10;
+    loop {
+        let out = Command::new("launchctl")
+            .args(["bootstrap", domain, plist])
+            .output()?;
+        if out.status.success() {
+            return Ok(());
+        }
+        attempts -= 1;
+        if attempts == 0 {
+            eprint!("{}", String::from_utf8_lossy(&out.stderr));
+            return Err(format!("launchctl bootstrap failed ({})", out.status).into());
+        }
+        thread::sleep(Duration::from_millis(300));
+    }
 }
 
 /// Unloads the LaunchAgent and removes its plist. Safe to run when nothing is
