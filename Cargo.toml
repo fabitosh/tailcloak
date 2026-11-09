@@ -1,6 +1,6 @@
 [package]
 name = "tailcloak"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "Automate tailscale state and exit node per network (macOS)"
 license = "MIT OR Apache-2.0"
