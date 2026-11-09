@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn print_usage() {
     println!(
-        "tailcloak — toggle Tailscale based on trusted gateway MAC addresses (macOS)\n\
+        "tailcloak — enforce Tailscale per network, by trusted gateway MAC address (macOS)\n\
          \n\
          Usage: tailcloak [COMMAND]\n\
          \n\
@@ -48,10 +48,12 @@ fn print_usage() {
          \x20 trust-current      Trust the current network's gateway\n\
          \x20 distrust-current   Untrust the current network's gateway\n\
          \x20 show-trusted       List trusted gateway MACs\n\
-         \x20 pause <minutes>    Take Tailscale down and pause toggling for N min (0 = resume)\n\
-         \x20 resume             Reconcile now and resume toggling\n\
+         \x20 pause <minutes>    Take Tailscale down and pause enforcing for N min (0 = resume)\n\
+         \x20 resume             Reconcile now and resume enforcing\n\
          \x20 service install    Install and start the LaunchAgent\n\
          \x20 service uninstall  Stop and remove the LaunchAgent\n\
+         \n\
+         Config: ~/.config/tailcloak/config.toml ([trusted]/[untrusted] policies; see README)\n\
          \n\
          Options:\n\
          \x20 -h, --help         Print this help\n\
