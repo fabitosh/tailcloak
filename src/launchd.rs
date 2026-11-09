@@ -18,7 +18,9 @@ pub const LABEL: &str = "dev.fmeier.tailcloak";
 /// `~/Library/LaunchAgents/<LABEL>.plist` — an Apple path, resolved from `$HOME`
 /// directly (not via XDG, unlike our config).
 fn plist_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    Ok(home()?.join("Library/LaunchAgents").join(format!("{LABEL}.plist")))
+    Ok(home()?
+        .join("Library/LaunchAgents")
+        .join(format!("{LABEL}.plist")))
 }
 
 /// `~/Library/Logs/tailcloak.log` — where launchd redirects stdout + stderr.
@@ -102,7 +104,9 @@ pub fn install() -> Result<(), Box<dyn std::error::Error>> {
 
     // Best-effort unload of any prior version; output swallowed since "not
     // loaded" is the normal first-install case.
-    let _ = Command::new("launchctl").args(["bootout", &target]).output();
+    let _ = Command::new("launchctl")
+        .args(["bootout", &target])
+        .output();
 
     let plist_str = plist.to_str().ok_or("plist path is not valid UTF-8")?;
     bootstrap(&domain, plist_str)?;
@@ -141,7 +145,9 @@ pub fn uninstall() -> Result<(), Box<dyn std::error::Error>> {
     let plist = plist_path()?;
     let target = format!("gui/{}/{LABEL}", current_uid()?);
 
-    let _ = Command::new("launchctl").args(["bootout", &target]).output();
+    let _ = Command::new("launchctl")
+        .args(["bootout", &target])
+        .output();
 
     match fs::remove_file(&plist) {
         Ok(()) => {}
