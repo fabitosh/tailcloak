@@ -8,13 +8,11 @@ A lightweight, native macOS background daemon in Rust that enforces a Tailscale 
 
 ## Status
 
-**Complete and ready to publish.** Event-driven daemon + launchd deployment + crates.io packaging (dual MIT/Apache-2.0) all done. `cargo clippy` + `cargo test` (34 tests) green. Env: Rust stable, aarch64-apple-darwin.
+**Released: 0.2.0** (2026-11-09) on crates.io, GitHub Releases and the Homebrew tap (`fabitosh/tap/tailcloak`). GitHub Actions CI (fmt, clippy `-D warnings`, test on macOS) green; 34 tests. Env: Rust stable, aarch64-apple-darwin.
 
-Built incrementally: config → tailscale subprocess → gateway detection → CLI → event-driven daemon → launchd deploy → crates.io packaging → publish polish (`service` namespacing, `pause`/`resume`, `--help`/`--version`).
+Built incrementally: config → tailscale subprocess → gateway detection → CLI → event-driven daemon → launchd deploy → crates.io packaging → publish polish (`service` namespacing, `pause`/`resume`, `--help`/`--version`) → 0.2: configurable `[trusted]`/`[untrusted]` policies, exit-node enforcement, strict config parsing, fail-safe on unreadable config.
 
-0.2 (branch `feat/config-policies`): configurable `[trusted]`/`[untrusted]` policies, exit-node enforcement, strict config parsing, fail-safe on unreadable config. Not yet released/version-bumped.
-
-Possible follow-ups (not started): dedupe redundant `tailscale up/down` calls (a `tailscale status --json` guard), Homebrew tap, optional menu-bar UI, a `CFRunLoopTimer` to resume the daemon at pause-expiry without waiting for the next network change.
+Possible follow-ups (not started): dedupe redundant `tailscale` calls with a `tailscale status --json` guard (the daemon also re-fires on Tailscale's own route changes when an exit node comes up), optional menu-bar UI, a `CFRunLoopTimer` to resume the daemon at pause-expiry without waiting for the next network change.
 
 ## Architecture
 
@@ -71,7 +69,13 @@ exit_node = "auto:any"
 
 ## Develop & release
 
-- Test / lint: `cargo test`, `cargo clippy --all-targets`.
+- Test / lint: `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check` — exactly what CI (`.github/workflows/ci.yml`, `macos-latest`) runs on pushes to `main` and PRs.
 - Local service: `tailcloak service install` / `service uninstall`; temporary override with `tailcloak pause <min>` / `resume`; logs at `~/Library/Logs/tailcloak.log`; inspect with `launchctl print gui/$(id -u)/dev.fmeier.tailcloak`.
-- Publish: dual-licensed `MIT OR Apache-2.0`; `cargo publish` (versions are immutable — only yankable). Tag releases for crates.io / a future Homebrew tap.
-- Commits: `feat|fix|refactor|chore|test|docs(scope): …`; scope mirrors the module (`config`, `network`, `tailscale`, `daemon`, `launchd`, `pause`, `main`).
+- Release (dual-licensed `MIT OR Apache-2.0`):
+  1. `chore: bump version X.Y.Z` (`Cargo.toml` + `Cargo.lock`), merged to `main`.
+  2. Annotated tag `vX.Y.Z` (message = tag name) on the bump commit; push `main` + tag; wait for CI green.
+  3. `cargo publish --locked` (versions are immutable — only yankable; `--dry-run` first).
+  4. GitHub release: title = tag, body = `release-notes/vX.Y.Z.md` (local, gitignored; user-facing prose, ends with the upgrade snippet).
+  5. Homebrew tap (`../homebrew-tap`, `Formula/tailcloak.rb`): bump `url` to the tag tarball + its `sha256`; commit `chore: tailcloak X.Y.Z`.
+- Smoke test before releasing behavior changes: `cargo install --path . --locked --force && tailcloak service install`, then `run-once` on a trusted network and (via `distrust-current` / `trust-current`) an untrusted one.
+- Commits: `feat|fix|refactor|chore|test|docs(scope): …`; scope mirrors the module (`config`, `network`, `tailscale`, `daemon`, `launchd`, `pause`, `policy`, `main`). Work on a branch; keep each commit building (bisectable).
