@@ -8,6 +8,7 @@ mod daemon;
 mod launchd;
 mod network;
 mod pause;
+mod policy;
 mod tailscale;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
