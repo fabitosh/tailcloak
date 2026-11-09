@@ -6,10 +6,30 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::network::MacAddr;
+use crate::policy::Policy;
 
-#[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+/// Missing `[trusted]` / `[untrusted]` sections fall back to the 0.1 behavior
+/// (trusted -> down, untrusted -> up), so a 0.1 config means exactly what it did.
+/// Unknown keys are rejected: a typo must not silently drop a security setting.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(default)]
     pub trusted_gateway_macs: HashSet<MacAddr>,
+    #[serde(default = "Policy::trusted_default")]
+    pub trusted: Policy,
+    #[serde(default = "Policy::untrusted_default")]
+    pub untrusted: Policy,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            trusted_gateway_macs: HashSet::new(),
+            trusted: Policy::trusted_default(),
+            untrusted: Policy::untrusted_default(),
+        }
+    }
 }
 
 impl Config {
@@ -49,6 +69,14 @@ impl Config {
         write_and_swap().inspect_err(|_| {
             let _ = fs::remove_file(&tmp);
         })
+    }
+
+    pub fn policy_for(&self, trusted: bool) -> &Policy {
+        if trusted {
+            &self.trusted
+        } else {
+            &self.untrusted
+        }
     }
 
     pub fn add_trusted_gateway(&mut self, mac: MacAddr) -> bool {
@@ -91,6 +119,7 @@ fn xdg_dir(var: &str, fallback: &str) -> Result<PathBuf, Box<dyn std::error::Err
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::{Connection, ExitNode};
     use tempfile::tempdir;
 
     fn mac(s: &str) -> MacAddr {
@@ -119,6 +148,65 @@ mod tests {
         let loaded = Config::load_from(&path).unwrap();
         assert_eq!(loaded, Config::default());
         assert!(loaded.trusted_gateway_macs.is_empty());
+    }
+
+    #[test]
+    fn legacy_config_keeps_legacy_behavior() {
+        // Backward-compat guarantee: a 0.1 config (MACs only) must parse to the
+        // 0.1 behavior — trusted -> down, untrusted -> up, exit node untouched.
+        let config: Config =
+            toml::from_str(r#"trusted_gateway_macs = ["d8:ec:e5:af:d0:29"]"#).unwrap();
+        assert_eq!(config.trusted, Policy::trusted_default());
+        assert_eq!(config.untrusted, Policy::untrusted_default());
+        assert_eq!(config.trusted.tailscale(), Connection::Down);
+        assert_eq!(config.untrusted.tailscale(), Connection::Up);
+        assert_eq!(config.trusted.exit_node(), &ExitNode::Unmanaged);
+        assert_eq!(config.untrusted.exit_node(), &ExitNode::Unmanaged);
+    }
+
+    #[test]
+    fn parses_full_config() {
+        let config: Config = toml::from_str(
+            r#"
+            trusted_gateway_macs = ["d8:ec:e5:af:d0:29"]
+
+            [trusted]
+            tailscale = "unmanaged"
+            exit_node = "off"
+
+            [untrusted]
+            tailscale = "up"
+            exit_node = "auto:any"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(config.policy_for(true).tailscale(), Connection::Unmanaged);
+        assert_eq!(config.policy_for(true).exit_node(), &ExitNode::Off);
+        assert_eq!(config.policy_for(false).tailscale(), Connection::Up);
+        assert_eq!(
+            config.policy_for(false).exit_node(),
+            &ExitNode::Node("auto:any".into())
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_top_level_keys() {
+        let result: Result<Config, _> = toml::from_str("trusted_gateway_mac = []");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn policies_round_trip_through_save() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let config = Config {
+            untrusted: Policy::new(Connection::Up, ExitNode::Node("my-node".into())).unwrap(),
+            ..Config::default()
+        };
+        config.save_to(&path).unwrap();
+
+        assert_eq!(Config::load_from(&path).unwrap(), config);
     }
 
     #[test]
